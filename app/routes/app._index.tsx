@@ -2,6 +2,7 @@ import type { LoaderFunctionArgs } from "react-router";
 import { useLoaderData } from "react-router";
 import { authenticate } from "../shopify.server";
 import { normalizeShopifyOrder } from "../services/order-normalizer.server";
+import { findProductMapping } from "../services/product-mapping.server";
 
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -38,13 +39,25 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     ? normalizeShopifyOrder(shopifyOrder)
     : null;
 
+    const mappedItems =
+      order?.items.map((item) => {
+        const mapping = findProductMapping(item.sku);
+
+        return {
+          ...item,
+          fulfillmentSku: mapping?.fulfillmentSku ?? null,
+        };
+      }) ?? [];
+
     return {
       order,
+      mappedItems,
     };
   };
+  
 
 export default function Index() {
-  const { order } = useLoaderData<typeof loader>();
+  const { order, mappedItems } = useLoaderData<typeof loader>();
 
   if (!order) {
     return (
@@ -101,6 +114,21 @@ export default function Index() {
             </div>
           ),
         )}
+        
+        <h3>Fulfillment Mapping</h3>
+
+        {mappedItems.map((item, index) => (
+          <div key={index}>
+            <p>
+              <strong>Seller SKU:</strong> {item.sku || "No SKU"}
+            </p>
+
+            <p>
+              <strong>Fulfillment SKU:</strong>{" "}
+              {item.fulfillmentSku || "No mapping found"}
+            </p>
+          </div>
+        ))}
       </s-section>
     </s-page>
   );
