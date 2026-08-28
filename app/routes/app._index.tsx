@@ -1,6 +1,8 @@
 import type { LoaderFunctionArgs } from "react-router";
 import { useLoaderData } from "react-router";
 import { authenticate } from "../shopify.server";
+import { normalizeShopifyOrder } from "../services/order-normalizer.server";
+
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin } = await authenticate.admin(request);
@@ -30,12 +32,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   const json = await response.json();
 
-  const order = json.data?.orders?.nodes?.[0] ?? null;
+  const shopifyOrder = json.data?.orders?.nodes?.[0] ?? null;
 
-  return {
-    order,
+  const order = shopifyOrder
+    ? normalizeShopifyOrder(shopifyOrder)
+    : null;
+
+    return {
+      order,
+    };
   };
-};
 
 export default function Index() {
   const { order } = useLoaderData<typeof loader>();
@@ -54,11 +60,11 @@ export default function Index() {
     <s-page heading="Khakan Connect">
       <s-section heading="Latest Seller Order">
         <p>
-          <strong>Order:</strong> {order.name}
+          <strong>Order:</strong> {order.sourceOrderNumber}
         </p>
 
         <p>
-          <strong>Shopify Order ID:</strong> {order.id}
+          <strong>Shopify Order ID:</strong> {order.sourceOrderId}
         </p>
 
         <p>
@@ -66,12 +72,12 @@ export default function Index() {
         </p>
 
         <p>
-          <strong>Payment Status:</strong> {order.displayFinancialStatus}
+          <strong>Payment Status:</strong> {order.paymentStatus}
         </p>
 
         <h3>Line Items</h3>
 
-        {order.lineItems.nodes.map(
+        {order.items.map(
           (
             item: {
               name: string;
