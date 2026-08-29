@@ -3,6 +3,7 @@ import { useLoaderData } from "react-router";
 import { authenticate } from "../shopify.server";
 import { normalizeShopifyOrder } from "../services/order-normalizer.server";
 import { findProductMapping } from "../services/product-mapping.server";
+import { testFulfillmentConnection } from "../services/fulfillment-shopify.server";
 
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -48,16 +49,24 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           fulfillmentSku: mapping?.fulfillmentSku ?? null,
         };
       }) ?? [];
+    
+    const fulfillmentShop = await testFulfillmentConnection();
 
     return {
       order,
       mappedItems,
+      fulfillmentShop,
     };
+    
   };
   
 
 export default function Index() {
-  const { order, mappedItems } = useLoaderData<typeof loader>();
+  const {
+    order,
+    mappedItems,
+    fulfillmentShop,
+  } = useLoaderData<typeof loader>();
 
   if (!order) {
     return (
@@ -129,6 +138,18 @@ export default function Index() {
             </p>
           </div>
         ))}
+
+        <h3>Fulfillment Store Connection</h3>
+
+        <p>
+          <strong>Store:</strong>{" "}
+          {fulfillmentShop?.name || "Not connected"}
+        </p>
+
+        <p>
+          <strong>Domain:</strong>{" "}
+          {fulfillmentShop?.myshopifyDomain || "Not connected"}
+        </p>
       </s-section>
     </s-page>
   );
