@@ -32,3 +32,23 @@ model Session {
   refreshToken        String?
   refreshTokenExpires DateTime?
 }
+
+model OrderConnection {
+  id                   Int      @id @default(autoincrement())
+
+  sellerShop           String
+  sellerOrderId        String
+  sellerOrderName      String
+
+  fulfillmentShop      String
+  fulfillmentOrderId   String
+  fulfillmentOrderName String
+
+  status               String   @default("created")
+
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@unique([sellerShop, sellerOrderId])
+  @@index([fulfillmentShop, fulfillmentOrderId])
+}
