@@ -9,21 +9,21 @@ const productMappings: ProductMapping[] = [
     sellerSku: "SELLER1-BLACK-S",
     fulfillmentSku: "KC-TEST-BLK-S",
      fulfillmentVariantId:
-      "gid://shopify/ProductVariant/53060481352000",
+      "gid://shopify/ProductVariant/52328842789080",
   },
 
   {
     sellerSku: "SELLER1-BLACK-M",
     fulfillmentSku: "KC-TEST-BLK-M",
     fulfillmentVariantId:
-      "gid://shopify/ProductVariant/53060481384768",
+      "gid://shopify/ProductVariant/52328842821848",
   },
 
   {
     sellerSku: "SELLER1-BLACK-L",
     fulfillmentSku: "KC-TEST-BLK-L",
     fulfillmentVariantId:
-      "gid://shopify/ProductVariant/53060481417536",
+      "gid://shopify/ProductVariant/52328842854616",
   },
 ];
 
