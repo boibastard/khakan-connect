@@ -2,20 +2,21 @@
 
 client_id = "8f4a1318ea235018b6ce715f9969eee2"
 name = "Khakan Connect Dev"
-application_url = "https://example.com"
+application_url = "https://your-current-tunnel.trycloudflare.com"
 embedded = true
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "read_orders,read_products,read_locations,write_orders,write_fulfillments"
+scopes = "read_locations,read_orders,read_products,write_fulfillments,write_orders"
 
 use_legacy_install_flow = false
 
 [auth]
-redirect_urls = [ ]
+redirect_urls = [ "https://your-current-tunnel.trycloudflare.com/auth/callback" ]
 
 [webhooks]
 api_version = "2026-07"
 
 [build]
 automatically_update_urls_on_dev = true
+dev_store_url = "khakan-seller-1.myshopify.com"

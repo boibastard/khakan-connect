@@ -13,10 +13,20 @@ import { findProductMapping } from "../services/product-mapping.server";
 import {
   testFulfillmentConnection,
   createFulfillmentOrder,
+  FULFILLMENT_SHOP,
+  debugFulfillmentSession,
 } from "../services/fulfillment-shopify.server";
+import {
+  findOrderConnection,
+  createOrderConnection,
+} from "../services/order-connection.server";
+
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { admin } = await authenticate.admin(request);
+  const { admin, session } =
+    await authenticate.admin(request);
+
+  const sellerShop = session.shop;
 
   const response = await admin.graphql(
     `#graphql
@@ -67,6 +77,22 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   const order =
       normalizeShopifyOrder(shopifyOrder);
+
+  const existingConnection =
+      await findOrderConnection(
+        sellerShop,
+        order.sourceOrderId,
+      );
+
+    if (existingConnection) {
+      return {
+        success: true,
+        message:
+          `Production order ${existingConnection.fulfillmentOrderName} already exists. No duplicate was created.`,
+        fulfillmentOrderId:
+          existingConnection.fulfillmentOrderId,
+      };
+    }
 
     if (order.items.length === 0) {
     return {
@@ -129,14 +155,46 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   if ("alreadyExists" in fulfillmentOrder) {
+    await createOrderConnection({
+      sellerShop,
+      sellerOrderId: order.sourceOrderId,
+      sellerOrderName: order.sourceOrderNumber,
+
+      fulfillmentShop: FULFILLMENT_SHOP,
+      fulfillmentOrderId:
+        fulfillmentOrder.id,
+      fulfillmentOrderName:
+        fulfillmentOrder.name,
+    });
+
     return {
       success: true,
       message:
-        `Production order ${fulfillmentOrder.name} already exists. No duplicate was created.`,
+        `Production order ${fulfillmentOrder.name} already exists. Khakan Connect relationship saved.`,
       fulfillmentOrderId:
         fulfillmentOrder.id,
     };
   }
+
+  await createOrderConnection({
+    sellerShop,
+    sellerOrderId: order.sourceOrderId,
+    sellerOrderName: order.sourceOrderNumber,
+
+    fulfillmentShop: FULFILLMENT_SHOP,
+    fulfillmentOrderId:
+      fulfillmentOrder.id,
+    fulfillmentOrderName:
+      fulfillmentOrder.name,
+  });
+
+  return {
+    success: true,
+    message:
+      `Created Shop B order ${fulfillmentOrder.name} and saved the Khakan Connect relationship.`,
+    fulfillmentOrderId:
+      fulfillmentOrder.id,
+  };
 
   return {
     success: true,
@@ -207,8 +265,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         };
       }) ?? [];
     
-    const fulfillmentShop = await testFulfillmentConnection();
 
+    await debugFulfillmentSession();
+    
+    const fulfillmentShop = await testFulfillmentConnection();
+    //const fulfillmentShop = null as {
+    //  name: string;
+    //  myshopifyDomain: string;
+    //} | null;
 
 
     return {

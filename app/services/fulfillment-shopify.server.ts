@@ -1,6 +1,7 @@
 import shopify from "../shopify.server";
 
-const FULFILLMENT_SHOP = "khakan-fulfillment-1.myshopify.com";
+export const FULFILLMENT_SHOP =
+  "khakan-fulfillment-2.myshopify.com";
 
 export async function findFulfillmentVariantBySku(sku: string) {
   try {
@@ -102,7 +103,7 @@ export async function findExistingFulfillmentOrder(
       error,
     );
 
-    throw error;
+    return null;
   }
 }
 
@@ -254,6 +255,34 @@ export async function createFulfillmentOrder(input: {
   } catch (error) {
     console.error(
       "Failed to create fulfillment order:",
+      error,
+    );
+
+    return null;
+  }
+}
+
+export async function debugFulfillmentSession() {
+  try {
+    const offlineId =
+      `offline_${FULFILLMENT_SHOP}`;
+
+    const session =
+      await shopify.sessionStorage.loadSession(offlineId);
+
+    console.log("FULFILLMENT SESSION DEBUG:", {
+      offlineId,
+      found: Boolean(session),
+      shop: session?.shop,
+      isOnline: session?.isOnline,
+      scope: session?.scope,
+      hasAccessToken: Boolean(session?.accessToken),
+    });
+
+    return session;
+  } catch (error) {
+    console.error(
+      "Failed to inspect fulfillment session:",
       error,
     );
 
