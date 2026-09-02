@@ -21,12 +21,18 @@ import {
   createOrderConnection,
 } from "../services/order-connection.server";
 
+import { getConnectedStore } from "../services/connected-store.server";
+
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { admin, session } =
     await authenticate.admin(request);
 
   const sellerShop = session.shop;
+
+  const connectedStore = await getConnectedStore(sellerShop);
+
+  console.log("CONNECTED STORE:", connectedStore);
 
   const response = await admin.graphql(
     `#graphql
@@ -195,20 +201,21 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     fulfillmentOrderId:
       fulfillmentOrder.id,
   };
-
-  return {
-    success: true,
-    message:
-      `Created Shop B order ${fulfillmentOrder.name}`,
-    fulfillmentOrderId:
-      fulfillmentOrder.id,
-  };
 };
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { admin } = await authenticate.admin(request);
+  const { admin, session } =
+    await authenticate.admin(request);
 
-  
+  const currentShop = session.shop;
+
+  const connectedStore =
+    await getConnectedStore(currentShop);
+
+  console.log(
+    "CONNECTED STORE FROM LOADER:",
+    connectedStore,
+  );
 
   const response = await admin.graphql(
     `#graphql
@@ -247,11 +254,18 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   const json = await response.json();
 
+  console.log(
+    "SELLER LATEST ORDER RAW:",
+    JSON.stringify(json, null, 2),
+  );
+
   const shopifyOrder = json.data?.orders?.nodes?.[0] ?? null;
 
   const order = shopifyOrder
     ? normalizeShopifyOrder(shopifyOrder)
     : null;
+
+    console.log("NORMALIZED SELLER ORDER:", order);
 
     const mappedItems =
       order?.items.map((item) => {
@@ -264,21 +278,21 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
             mapping?.fulfillmentVariantId ?? null,
         };
       }) ?? [];
-    
+
+    console.log("SELLER MAPPED ITEMS:", mappedItems);
 
     await debugFulfillmentSession();
-    
+
     const fulfillmentShop = await testFulfillmentConnection();
-    //const fulfillmentShop = null as {
-    //  name: string;
-    //  myshopifyDomain: string;
-    //} | null;
+
 
 
     return {
       order,
       mappedItems,
       fulfillmentShop,
+      currentShop,
+      connectedStore,
     };
     
   };
@@ -289,10 +303,19 @@ export default function Index() {
     order,
     mappedItems,
     fulfillmentShop,
+    currentShop,
+    connectedStore,
   } = useLoaderData<typeof loader>();
 
   const actionData =
     useActionData<typeof action>();
+
+  console.log("UI RENDER DATA:", {
+    order,
+    mappedItems,
+    fulfillmentShop,
+    actionData,
+  });
 
   if (!order) {
     return (
@@ -305,8 +328,26 @@ export default function Index() {
   }
 
   return (
+  
     <s-page heading="Khakan Connect">
       <s-section heading="Latest Seller Order">
+        <div style={{ marginBottom: "20px" }}>
+        <h2>Khakan Connect Store Info</h2>
+
+        <p>
+          <strong>Shop:</strong> {currentShop}
+        </p>
+
+        <p>
+          <strong>Name:</strong>{" "}
+          {connectedStore?.name ?? "Unknown store"}
+        </p>
+
+        <p>
+          <strong>Role:</strong>{" "}
+          {connectedStore?.role ?? "UNREGISTERED"}
+        </p>
+      </div>
         <p>
           <strong>Order:</strong> {order.sourceOrderNumber}
         </p>
