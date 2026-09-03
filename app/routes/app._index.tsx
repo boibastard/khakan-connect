@@ -130,14 +130,19 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     };
   }
 
-  const mappedItems = order.items.map((item) => {
-    const mapping = findProductMapping(item.sku);
+  const mappedItems = await Promise.all(
+    order.items.map(async (item) => {
+      const mapping = await findProductMapping(
+        sellerShop,
+        item.sku,
+      );
 
-    return {
-      sellerItem: item,
-      mapping,
-    };
-  });
+      return {
+        sellerItem: item,
+        mapping,
+      };
+    }),
+  );
 
   const unmappedItems = mappedItems.filter(
     (item) => !item.mapping,
@@ -318,17 +323,25 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
     console.log("NORMALIZED SELLER ORDER:", order);
 
-    const mappedItems =
-      order?.items.map((item) => {
-        const mapping = findProductMapping(item.sku);
+    const mappedItems = order
+      ? await Promise.all(
+          order.items.map(async (item) => {
+            const mapping =
+              await findProductMapping(
+                currentShop,
+                item.sku,
+              );
 
-        return {
-          ...item,
-          fulfillmentSku: mapping?.fulfillmentSku ?? null,
-          fulfillmentVariantId:
-            mapping?.fulfillmentVariantId ?? null,
-        };
-      }) ?? [];
+            return {
+              ...item,
+              fulfillmentSku:
+                mapping?.fulfillmentSku ?? null,
+              fulfillmentVariantId:
+                mapping?.fulfillmentVariantId ?? null,
+            };
+          }),
+        )
+      : [];
 
     console.log("SELLER MAPPED ITEMS:", mappedItems);
 
