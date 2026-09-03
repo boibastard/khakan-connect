@@ -28,7 +28,6 @@ export async function createOrderConnection(input: {
       sellerShop: input.sellerShop,
       sellerOrderId: input.sellerOrderId,
       sellerOrderName: input.sellerOrderName,
-
       fulfillmentShop: input.fulfillmentShop,
       fulfillmentOrderId: input.fulfillmentOrderId,
       fulfillmentOrderName:
@@ -36,5 +35,19 @@ export async function createOrderConnection(input: {
 
       status: "created",
     },
+  });
+}
+
+export async function listFulfillmentOrderConnections(
+  fulfillmentShop: string,
+) {
+  return db.orderConnection.findMany({
+    where: {
+      fulfillmentShop,
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
+    take: 25,
   });
 }

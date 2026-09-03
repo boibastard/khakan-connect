@@ -19,10 +19,18 @@ import {
 import {
   findOrderConnection,
   createOrderConnection,
+  listFulfillmentOrderConnections,
 } from "../services/order-connection.server";
 
 import { getConnectedStore } from "../services/connected-store.server";
 
+type FulfillmentOrderConnection = {
+  id: number;
+  sellerShop: string;
+  sellerOrderName: string;
+  fulfillmentOrderName: string;
+  status: string;
+};
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { admin, session } =
@@ -31,6 +39,21 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const sellerShop = session.shop;
 
   const connectedStore = await getConnectedStore(sellerShop);
+  
+  if (!connectedStore) {
+    return {
+      success: false,
+      message: "This store is not registered in Khakan Connect.",
+    };
+  }
+
+  if (connectedStore.role !== "CLIENT") {
+    return {
+      success: false,
+      message:
+        "Production orders can only be created from a Client store.",
+    };
+  }
 
   console.log("CONNECTED STORE:", connectedStore);
 
@@ -212,6 +235,34 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const connectedStore =
     await getConnectedStore(currentShop);
 
+  if (!connectedStore) {
+    return {
+      currentShop,
+      connectedStore: null,
+      order: null,
+      mappedItems: [],
+      fulfillmentShop: null,
+      fulfillmentOrders: [],
+    };
+  }
+
+  if (connectedStore.role === "FULFILLMENT") {
+    const fulfillmentOrders =
+      await listFulfillmentOrderConnections(
+        currentShop,
+      );
+
+    return {
+      currentShop,
+      connectedStore,
+      order: null,
+      mappedItems: [],
+      fulfillmentShop: null,
+      fulfillmentOrders,
+    };
+  }
+
+
   console.log(
     "CONNECTED STORE FROM LOADER:",
     connectedStore,
@@ -293,9 +344,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       fulfillmentShop,
       currentShop,
       connectedStore,
+      fulfillmentOrders: [],
     };
     
   };
+
+
   
 
 export default function Index() {
@@ -305,6 +359,7 @@ export default function Index() {
     fulfillmentShop,
     currentShop,
     connectedStore,
+    fulfillmentOrders,
   } = useLoaderData<typeof loader>();
 
   const actionData =
@@ -316,6 +371,72 @@ export default function Index() {
     fulfillmentShop,
     actionData,
   });
+
+  if (connectedStore?.role === "FULFILLMENT") {
+    return (
+      <s-page heading="Khakan Connect">
+        <s-section heading="Fulfillment Dashboard">
+
+          <div style={{ marginBottom: "20px" }}>
+            <h2>Khakan Connect Store Info</h2>
+
+            <p>
+              <strong>Shop:</strong> {currentShop}
+            </p>
+
+            <p>
+              <strong>Name:</strong>{" "}
+              {connectedStore.name ?? "Unknown store"}
+            </p>
+
+            <p>
+              <strong>Role:</strong>{" "}
+              {connectedStore.role}
+            </p>
+          </div>
+
+          <h3>Incoming Production Orders</h3>
+
+          {fulfillmentOrders.length === 0 ? (
+            <p>No production orders yet.</p>
+          ) : (
+            fulfillmentOrders.map(
+              (connection: FulfillmentOrderConnection) => (
+              <div
+                key={connection.id}
+                style={{
+                  marginBottom: "20px",
+                  paddingBottom: "20px",
+                  borderBottom: "1px solid #ddd",
+                }}
+              >
+                <p>
+                  <strong>Seller:</strong>{" "}
+                  {connection.sellerShop}
+                </p>
+
+                <p>
+                  <strong>Seller Order:</strong>{" "}
+                  {connection.sellerOrderName}
+                </p>
+
+                <p>
+                  <strong>Fulfillment Order:</strong>{" "}
+                  {connection.fulfillmentOrderName}
+                </p>
+
+                <p>
+                  <strong>Status:</strong>{" "}
+                  {connection.status}
+                </p>
+              </div>
+            ))
+          )}
+
+        </s-section>
+      </s-page>
+    );
+  }
 
   if (!order) {
     return (
@@ -445,3 +566,5 @@ export default function Index() {
     </s-page>
   );
 }
+
+
