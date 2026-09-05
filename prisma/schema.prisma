@@ -87,3 +87,20 @@ model ProductMapping {
   @@unique([sellerShop, sellerSku])
   @@index([fulfillmentShop, fulfillmentVariantId])
 }
+
+model SellerProductRule {
+  id Int @id @default(autoincrement())
+
+  sellerShop      String
+  sellerProductId String?
+  sellerVariantId String?
+  sellerSku       String
+
+  fulfillmentEnabled Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([sellerShop, sellerSku])
+  @@index([sellerShop, fulfillmentEnabled])
+}

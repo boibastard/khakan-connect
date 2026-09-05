@@ -1,3 +1,6 @@
+// =============================
+// IMPORTS
+// =============================
 import type {
   LoaderFunctionArgs,
   ActionFunctionArgs,
@@ -24,6 +27,12 @@ import {
 
 import { getConnectedStore } from "../services/connected-store.server";
 
+import { findSellerProductRule } from "../services/seller-product-rule.server";
+
+// =============================
+// TYPES
+// =============================
+
 type FulfillmentOrderConnection = {
   id: number;
   sellerShop: string;
@@ -32,10 +41,15 @@ type FulfillmentOrderConnection = {
   status: string;
 };
 
+// =============================
+// ACTION: CREATE PRODUCTION ORDER
+// =============================
+
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { admin, session } =
     await authenticate.admin(request);
-
+  
+  // Seller Authentication + Role Validation
   const sellerShop = session.shop;
 
   const connectedStore = await getConnectedStore(sellerShop);
@@ -56,7 +70,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   console.log("CONNECTED STORE:", connectedStore);
-
+  
+  // Fetch Latest Seller Order
   const response = await admin.graphql(
     `#graphql
       query LatestOrderForProduction {
@@ -104,9 +119,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     };
   }
 
+  // Normalize Shopify Order
   const order =
       normalizeShopifyOrder(shopifyOrder);
 
+  // Duplicate Order Protection
   const existingConnection =
       await findOrderConnection(
         sellerShop,
@@ -122,7 +139,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           existingConnection.fulfillmentOrderId,
       };
     }
-
+    
+    // Validate Seller Order Items
     if (order.items.length === 0) {
     return {
       success: false,
@@ -130,15 +148,44 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     };
   }
 
-  const mappedItems = await Promise.all(
+// Partial Fulfillment Check
+  const fulfillmentCandidates = await Promise.all(
     order.items.map(async (item) => {
-      const mapping = await findProductMapping(
+      const rule = await findSellerProductRule(
         sellerShop,
         item.sku,
       );
 
       return {
         sellerItem: item,
+        rule,
+      };
+    }),
+  );
+
+  const enabledItems = fulfillmentCandidates.filter(
+    ({ rule }) =>
+      rule?.fulfillmentEnabled === true,
+  );
+
+  if (enabledItems.length === 0) {
+    return {
+      success: false,
+      message:
+        "No items in this order are enabled for Khakan fulfillment.",
+    };
+  }
+
+  // Fulfillment Mapping Block
+  const mappedItems = await Promise.all(
+    enabledItems.map(async ({ sellerItem }) => {
+      const mapping = await findProductMapping(
+        sellerShop,
+        sellerItem.sku,
+      );
+
+      return {
+        sellerItem,
         mapping,
       };
     }),
@@ -162,7 +209,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         `Production order not created. Missing mappings for: ${missingSkus}`,
     };
   }
-
+  
+  // Build Fulfillment Order Line Items
   const fulfillmentItems = mappedItems.map(
     ({ sellerItem, mapping }) => ({
       fulfillmentVariantId:
@@ -173,6 +221,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   console.log("PRODUCTION ORDER ITEMS:", fulfillmentItems);
 
+  // Create Fulfillment Shopify Order
   const fulfillmentOrder =
     await createFulfillmentOrder({
     sellerOrderId: order.sourceOrderId,
@@ -188,6 +237,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     };
   }
 
+  // Handle Existing Fulfillment Order
   if ("alreadyExists" in fulfillmentOrder) {
     await createOrderConnection({
       sellerShop,
@@ -210,6 +260,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     };
   }
 
+  // Save Seller ↔ Fulfillment Order Relationship
   await createOrderConnection({
     sellerShop,
     sellerOrderId: order.sourceOrderId,
@@ -231,12 +282,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   };
 };
 
+// =============================
+// LOADER: DASHBOARD DATA
+// =============================
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } =
     await authenticate.admin(request);
 
   const currentShop = session.shop;
 
+  // Identify Current Store + Role
   const connectedStore =
     await getConnectedStore(currentShop);
 
@@ -251,6 +306,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     };
   }
 
+  // Fulfillment Dashboard Data
   if (connectedStore.role === "FULFILLMENT") {
     const fulfillmentOrders =
       await listFulfillmentOrderConnections(
@@ -273,6 +329,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     connectedStore,
   );
 
+  // Seller Dashboard: Fetch Latest Order
   const response = await admin.graphql(
     `#graphql
       query LatestOrder {
@@ -323,28 +380,44 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
     console.log("NORMALIZED SELLER ORDER:", order);
 
-    const mappedItems = order
-      ? await Promise.all(
-          order.items.map(async (item) => {
-            const mapping =
-              await findProductMapping(
+    // Seller Dashboard: Load Product Mappings
+  const mappedItems = order
+    ? await Promise.all(
+        order.items.map(async (item) => {
+          const rule =
+            await findSellerProductRule(
+              currentShop,
+              item.sku,
+            );
+
+          const fulfillmentEnabled =
+            rule?.fulfillmentEnabled === true;
+
+          const mapping = fulfillmentEnabled
+            ? await findProductMapping(
                 currentShop,
                 item.sku,
-              );
+              )
+            : null;
 
-            return {
-              ...item,
-              fulfillmentSku:
-                mapping?.fulfillmentSku ?? null,
-              fulfillmentVariantId:
-                mapping?.fulfillmentVariantId ?? null,
-            };
-          }),
-        )
-      : [];
+          return {
+            ...item,
+
+            fulfillmentEnabled,
+
+            fulfillmentSku:
+              mapping?.fulfillmentSku ?? null,
+
+            fulfillmentVariantId:
+              mapping?.fulfillmentVariantId ?? null,
+          };
+        }),
+      )
+    : [];
 
     console.log("SELLER MAPPED ITEMS:", mappedItems);
 
+    // Fulfillment Store Connection Status
     await debugFulfillmentSession();
 
     const fulfillmentShop = await testFulfillmentConnection();
@@ -364,7 +437,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
 
   
-
+// =============================
+// UI: ROLE-BASED DASHBOARD
+// =============================
 export default function Index() {
   const {
     order,
@@ -385,6 +460,7 @@ export default function Index() {
     actionData,
   });
 
+  // Fulfillment Dashboard UI
   if (connectedStore?.role === "FULFILLMENT") {
     return (
       <s-page heading="Khakan Connect">
@@ -451,6 +527,7 @@ export default function Index() {
     );
   }
 
+  // Seller Dashboard: No Order State
   if (!order) {
     return (
       <s-page heading="Khakan Connect">
@@ -461,6 +538,7 @@ export default function Index() {
     );
   }
 
+  // Seller Dashboard UI
   return (
   
     <s-page heading="Khakan Connect">
@@ -528,20 +606,41 @@ export default function Index() {
         <h3>Fulfillment Mapping</h3>
 
         {mappedItems.map((item, index) => (
-          <div key={index}>
+          <div
+            key={index}
+            style={{
+              marginBottom: "16px",
+              paddingBottom: "16px",
+              borderBottom: "1px solid #ddd",
+            }}
+          >
             <p>
-              <strong>Seller SKU:</strong> {item.sku || "No SKU"}
+              <strong>Seller SKU:</strong>{" "}
+              {item.sku || "No SKU"}
             </p>
 
             <p>
-              <strong>Fulfillment SKU:</strong>{" "}
-              {item.fulfillmentSku || "No mapping found"}
+              <strong>Fulfillment:</strong>{" "}
+              {item.fulfillmentEnabled
+                ? "Khakan Fulfillment"
+                : "Seller Fulfilled"}
             </p>
 
-            <p>
-              <strong>Fulfillment Variant ID:</strong>{" "}
-              {item.fulfillmentVariantId || "No mapping found"}
-            </p>
+            {item.fulfillmentEnabled && (
+              <>
+                <p>
+                  <strong>Fulfillment SKU:</strong>{" "}
+                  {item.fulfillmentSku ||
+                    "Needs mapping"}
+                </p>
+
+                <p>
+                  <strong>Fulfillment Variant ID:</strong>{" "}
+                  {item.fulfillmentVariantId ||
+                    "Needs mapping"}
+                </p>
+              </>
+            )}
           </div>
         ))}
 
