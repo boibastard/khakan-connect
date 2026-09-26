@@ -71,51 +71,61 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   console.log("CONNECTED STORE:", connectedStore);
   
-  // Fetch Latest Seller Order
+  const formData = await request.formData();
+  const sellerOrderId = formData.get("sellerOrderId");
+
+  if (
+    typeof sellerOrderId !== "string" ||
+    !/^gid:\/\/shopify\/Order\/[1-9]\d*$/.test(sellerOrderId)
+  ) {
+    return {
+      success: false,
+      message: "A valid Seller order ID is required.",
+    };
+  }
+
+  // Fetch the seller order displayed when the form was submitted.
   const response = await admin.graphql(
     `#graphql
-      query LatestOrderForProduction {
-        orders(first: 1, sortKey: CREATED_AT, reverse: true) {
-          nodes {
-            id
-            name
-            createdAt
-            displayFinancialStatus
-            shippingAddress {
-              firstName
-              lastName
-              company
-              address1
-              address2
-              city
-              provinceCode
-              zip
-              countryCodeV2
-              phone
-            }
+      query SellerOrderForProduction($id: ID!) {
+        order(id: $id) {
+          id
+          name
+          createdAt
+          displayFinancialStatus
+          shippingAddress {
+            firstName
+            lastName
+            company
+            address1
+            address2
+            city
+            provinceCode
+            zip
+            countryCodeV2
+            phone
+          }
 
-            lineItems(first: 10) {
-              nodes {
-                name
-                quantity
-                sku
-              }
+          lineItems(first: 10) {
+            nodes {
+              name
+              quantity
+              sku
             }
           }
         }
       }
     `,
+    { variables: { id: sellerOrderId } },
   );
 
   const json = await response.json();
-
-  const shopifyOrder =
-    json.data?.orders?.nodes?.[0] ?? null;
+  const shopifyOrder = json.data?.order ?? null;
 
   if (!shopifyOrder) {
     return {
       success: false,
-      message: "No Seller order found.",
+      message: "The selected Seller order could not be loaded.",
     };
   }
 
@@ -647,6 +657,11 @@ export default function Index() {
         <h3>Create Production Order</h3>
 
         <Form method="post">
+          <input
+            type="hidden"
+            name="sellerOrderId"
+            value={order.sourceOrderId}
+          />
           <button type="submit">
             Create Production Order
           </button>
